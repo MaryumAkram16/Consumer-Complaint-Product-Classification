@@ -1,6 +1,8 @@
 import streamlit as st
 import joblib
 import numpy as np
+import speech_recognition as sr
+from deep_translator import GoogleTranslator
 
 st.set_page_config(
     page_title="Complaint Classifier",
@@ -61,20 +63,68 @@ CATEGORIES = None  # populated after first prediction from clf.classes_
 # ---- TAB 1: Classify ----
 with tab1:
     st.markdown("#### Describe your complaint")
-    text_input = st.text_area(
-        "Complaint narrative",
-        height=160,
-        placeholder="e.g. My car was repossessed even though I had an approved payment plan with the lender...",
-        label_visibility="collapsed"
-    )
 
-    predict_clicked = st.button("🔎 Classify My Complaint", type="primary", use_container_width=False)
+    col_lang, col_mode = st.columns(2)
+    with col_lang:
+        language = st.radio("Language", ["English", "Urdu (اردو)"], horizontal=True)
+    with col_mode:
+        input_mode = st.radio("Input method", ["⌨️ Type", "🎤 Speak"], horizontal=True)
+
+    if language.startswith("Urdu"):
+        st.caption(
+            "⚠️ The model was trained only on English complaints. Urdu input is "
+            "automatically translated to English before classification — accuracy "
+            "depends on translation quality, not just the model itself."
+        )
+
+    raw_text = ""
+
+    if input_mode == "⌨️ Type":
+        placeholder = (
+            "مثال کے طور پر: میری گاڑی قرض کی ادائیگی کے باوجود ضبط کر لی گئی..."
+            if language.startswith("Urdu")
+            else "e.g. My car was repossessed even though I had an approved payment plan..."
+        )
+        raw_text = st.text_area(
+            "Complaint narrative", height=160, placeholder=placeholder,
+            label_visibility="collapsed"
+        )
+    else:
+        st.write("Tap to record, then stop when you're done speaking.")
+        audio_value = st.audio_input("Record your complaint")
+
+        if audio_value is not None:
+            recognizer = sr.Recognizer()
+            try:
+                with sr.AudioFile(audio_value) as source:
+                    audio_data = recognizer.record(source)
+                lang_code = "ur-PK" if language.startswith("Urdu") else "en-US"
+                raw_text = recognizer.recognize_google(audio_data, language=lang_code)
+                st.text_area("Transcribed text (edit if needed)", value=raw_text, height=100, key="transcribed")
+                raw_text = st.session_state.get("transcribed", raw_text)
+            except sr.UnknownValueError:
+                st.error("Couldn't understand the audio — try speaking again, closer to the mic.")
+            except sr.RequestError:
+                st.error("Speech recognition service unavailable right now. Try typing instead.")
+
+    predict_clicked = st.button("🔎 Classify My Complaint", type="primary")
 
     if predict_clicked:
-        if text_input.strip() == "":
-            st.warning("Type your complaint first — then hit classify.")
+        if raw_text.strip() == "":
+            st.warning("Enter or record your complaint first — then hit classify.")
         else:
-            X = vectorizer.transform([text_input])
+            # Translate to English if needed — the model only understands English
+            if language.startswith("Urdu"):
+                try:
+                    english_text = GoogleTranslator(source="ur", target="en").translate(raw_text)
+                    st.caption(f"**Translated to English:** {english_text}")
+                except Exception:
+                    st.error("Translation failed. Please try again or type in English.")
+                    st.stop()
+            else:
+                english_text = raw_text
+
+            X = vectorizer.transform([english_text])
             prediction = clf.predict(X)[0]
 
             # Confidence via decision_function -> softmax (hinge loss has no predict_proba)
@@ -103,7 +153,8 @@ with tab1:
 
             st.caption(
                 "Note: this reflects the model's relative confidence, not a guarantee of correctness. "
-                "Overall model accuracy across all categories is 85.3% (see Model Performance tab)."
+                "Overall model accuracy across all categories is 85.3% on English narratives "
+                "(see Model Performance tab)."
             )
 
 # ---- TAB 2: Performance ----
