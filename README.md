@@ -2,6 +2,10 @@
 
 A text classification model that predicts the financial product category (e.g. Credit reporting, Mortgage, Debt collection) from raw consumer complaint narratives, trained on the CFPB Consumer Complaint Database.
 
+## 🚀 Live App
+
+[consumer-complaint-classification.streamlit.app](https://consumer-complaint-classification.streamlit.app/)
+
 ## Problem
 
 The CFPB (Consumer Financial Protection Bureau) publishes millions of consumer complaints against financial companies, each including a free-text narrative describing the issue. This project builds a model that automatically routes a complaint to the correct product category based on that narrative text alone — a real-world use case for automating complaint triage instead of manual tagging.
@@ -74,6 +78,19 @@ The normalized confusion matrix shows that most of the model's errors are concen
 
 This suggests the remaining errors are largely driven by genuine semantic overlap between categories in the underlying complaint narratives, rather than an undertrained model.
 
+## App Features
+
+Beyond the model itself, the deployed Streamlit app adds a few things worth calling out:
+
+- **Bilingual input (English + Urdu):** since the model was trained only on English complaints, Urdu input is automatically translated to English (via `deep-translator`) before classification. The translated text is shown transparently so it's clear exactly what the model actually saw — this is a translate-then-classify pipeline, not native Urdu understanding.
+- **Voice input:** complaints can be typed or spoken (in either language) using Streamlit's built-in audio recorder, transcribed via `SpeechRecognition`. Speech-to-text errors are a real, observed failure mode — see the example below.
+- **Per-prediction confidence:** since the model uses hinge loss (no calibrated probabilities), confidence is computed by applying softmax to the raw decision scores across all 9 categories, and displayed both as ranked bars and as a radar chart.
+- **Dark, card-based UI** styled after a reference SaaS product design, rather than default Streamlit theming.
+
+### A real multilingual failure case
+
+Testing the Urdu voice pipeline surfaced a genuine, traceable error: a spoken complaint about **credit card fraud** was misclassified as **Debt collection** (41.4% confidence) instead of **Credit card or prepaid card**. Tracing the pipeline showed the speech recognizer mistranscribed "جعلی چارج" (*fraudulent charge*) as an unrelated phrase, stripping the fraud signal before translation or classification ever occurred. The classifier correctly handled the (corrupted) text it received — the error originated upstream, in speech recognition, not in the model. This is a useful, honest illustration that in a speech-based pipeline, errors can compound before the model ever sees clean input.
+
 ## What Didn't Work (and Why That's Useful to Know)
 
 Two follow-up experiments were run to try to close the gap on the weakest categories (Payday loan, Vehicle loan):
@@ -109,8 +126,11 @@ predict_category(
 
 - `polars` — memory-efficient CSV loading and data cleaning at scale
 - `scikit-learn` — HashingVectorizer, SGDClassifier, evaluation metrics
-- `matplotlib` / `seaborn` — visualization
+- `matplotlib` / `seaborn` — visualization (training/evaluation)
 - `joblib` — model persistence
+- `streamlit` — deployed app interface
+- `SpeechRecognition` — voice-to-text input
+- `deep-translator` — Urdu → English translation
 
 ## Possible Next Steps
 
