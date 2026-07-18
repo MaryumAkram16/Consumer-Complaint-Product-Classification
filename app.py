@@ -1,6 +1,7 @@
 import streamlit as st
 import joblib
 import numpy as np
+import math
 import speech_recognition as sr
 from deep_translator import GoogleTranslator
 
@@ -18,6 +19,98 @@ def load_model():
     return clf, vectorizer
 
 clf, vectorizer = load_model()
+
+SHORT_LABELS = {
+    "Bank account or service": "Bank account",
+    "Credit card or prepaid card": "Credit card",
+    "Credit reporting": "Credit reporting",
+    "Debt collection": "Debt collection",
+    "Money transfer or virtual currency": "Money transfer",
+    "Mortgage": "Mortgage",
+    "Payday, title, or personal loan": "Payday/title loan",
+    "Student loan": "Student loan",
+    "Vehicle loan or lease": "Vehicle loan",
+}
+
+def build_radar_svg(classes, confidence, top_idx):
+    """Builds a polar radar chart: one axis per category, dot distance = confidence,
+    with a highlighted wedge pointing toward the top predicted category."""
+    n = len(classes)
+    cx, cy = 260, 260
+    outer_r = 175
+    max_conf = max(confidence)
+
+    order = list(range(n))
+    angle_step = 2 * math.pi / n
+    start_angle = -math.pi / 2  # start at top, go clockwise
+
+    def point(i, radius):
+        angle = start_angle + i * angle_step
+        x = cx + radius * math.cos(angle)
+        y = cy + radius * math.sin(angle)
+        return x, y
+
+    svg_parts = [f'<svg viewBox="0 0 {cx*2} {cy*2}" xmlns="http://www.w3.org/2000/svg">']
+
+    # grid rings
+    for frac in [0.33, 0.66, 1.0]:
+        svg_parts.append(
+            f'<circle cx="{cx}" cy="{cy}" r="{outer_r*frac}" '
+            f'fill="none" stroke="#262D45" stroke-width="1"/>'
+        )
+
+    # axis lines
+    for i in order:
+        x, y = point(i, outer_r)
+        svg_parts.append(
+            f'<line x1="{cx}" y1="{cy}" x2="{x}" y2="{y}" stroke="#262D45" stroke-width="1"/>'
+        )
+
+    # highlighted wedge toward top predicted category
+    half_step = angle_step / 2
+    top_angle = start_angle + top_idx * angle_step
+    wx1 = cx + outer_r * math.cos(top_angle - half_step)
+    wy1 = cy + outer_r * math.sin(top_angle - half_step)
+    wx2 = cx + outer_r * math.cos(top_angle + half_step)
+    wy2 = cy + outer_r * math.sin(top_angle + half_step)
+    svg_parts.append(
+        f'<path d="M {cx} {cy} L {wx1} {wy1} A {outer_r} {outer_r} 0 0 1 {wx2} {wy2} Z" '
+        f'fill="url(#wedgeGrad)" opacity="0.35"/>'
+    )
+    svg_parts.append(
+        '<defs><linearGradient id="wedgeGrad" x1="0%" y1="0%" x2="0%" y2="100%">'
+        '<stop offset="0%" stop-color="#2DD4BF"/>'
+        '<stop offset="100%" stop-color="#8B5CF6"/></linearGradient></defs>'
+    )
+
+    # line from center to top category dot
+    tx, ty = point(top_idx, outer_r * (confidence[top_idx] / max_conf))
+    svg_parts.append(f'<line x1="{cx}" y1="{cy}" x2="{tx}" y2="{ty}" stroke="#2DD4BF" stroke-width="2"/>')
+
+    # dots + labels
+    for i in order:
+        r = max(18, outer_r * (confidence[i] / max_conf))
+        x, y = point(i, r)
+        lx, ly = point(i, outer_r + 26)
+        color = "#2DD4BF" if i == top_idx else "#8B5CF6"
+        dot_r = 9 if i == top_idx else 6
+        label = SHORT_LABELS.get(classes[i], classes[i])
+        anchor = "middle"
+        if lx < cx - 15:
+            anchor = "end"
+        elif lx > cx + 15:
+            anchor = "start"
+        svg_parts.append(f'<circle cx="{x}" cy="{y}" r="{dot_r}" fill="{color}"><title>{classes[i]}: {confidence[i]*100:.1f}%</title></circle>')
+        svg_parts.append(
+            f'<text x="{lx}" y="{ly}" fill="#8891A8" font-size="11" text-anchor="{anchor}" '
+            f'font-family="sans-serif">{label}</text>'
+        )
+
+    # center point
+    svg_parts.append(f'<circle cx="{cx}" cy="{cy}" r="5" fill="#FFFFFF"/>')
+
+    svg_parts.append('</svg>')
+    return "".join(svg_parts)
 
 # ============ GLOBAL DARK THEME STYLING ============
 st.markdown("""
@@ -267,6 +360,11 @@ if page == "🔍  Try It":
                 )
             bars_html += '</div>'
             st.markdown(bars_html, unsafe_allow_html=True)
+
+            st.markdown("#### Category radar")
+            st.caption("Each spoke is a product category — distance from center reflects confidence. The highlighted wedge marks the top prediction.")
+            radar_svg = build_radar_svg(classes, confidence, order[0])
+            st.markdown(f'<div class="card" style="display:flex;justify-content:center;">{radar_svg}</div>', unsafe_allow_html=True)
 
             st.caption(
                 "Confidence reflects the model's relative certainty, not a guarantee of correctness. "
