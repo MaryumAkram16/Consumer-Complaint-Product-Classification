@@ -259,12 +259,12 @@ if page == "🔍  Try It":
             bars_html = '<div class="card">'
             for i in order[:5]:
                 pct = confidence[i] * 100
-                bars_html += f"""
-                <div class="conf-row">
-                    <div class="conf-label"><span>{classes[i]}</span><span>{pct:.1f}%</span></div>
-                    <div class="conf-track"><div class="conf-fill" style="width:{pct}%;"></div></div>
-                </div>
-                """
+                bars_html += (
+                    '<div class="conf-row">'
+                    f'<div class="conf-label"><span>{classes[i]}</span><span>{pct:.1f}%</span></div>'
+                    f'<div class="conf-track"><div class="conf-fill" style="width:{pct}%;"></div></div>'
+                    '</div>'
+                )
             bars_html += '</div>'
             st.markdown(bars_html, unsafe_allow_html=True)
 
