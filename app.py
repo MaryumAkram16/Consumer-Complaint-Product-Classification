@@ -130,40 +130,143 @@ with tab2:
 
 # ---- TAB 3: Model & Method ----
 with tab3:
-    st.markdown("### How this was built")
+    st.markdown("### Project overview")
+    st.write(
+        "A text classification system that routes consumer financial complaints to the "
+        "correct product category, built to handle a real-world dataset too large to fit "
+        "comfortably in memory on free-tier hardware."
+    )
 
-    st.markdown("""
-**Data:** ~3.8M CFPB consumer complaints with a non-empty narrative, out of an original
-8GB / 3.8M+ row dataset. The original 21 `Product` categories were consolidated into 9,
-merging labels that were renamed over time by CFPB's evolving taxonomy (e.g. three
-different historical labels for "Credit reporting" were merged into one).
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Raw dataset", "8 GB / 3.8M rows")
+    with m2:
+        st.metric("Categories", "21 → 9")
+    with m3:
+        st.metric("Test accuracy", "85.3%")
+    with m4:
+        st.metric("Weighted F1", "0.86")
 
-**Vectorization:** `HashingVectorizer` (524,288 features, unigrams + bigrams) — chosen
-over TF-IDF because it doesn't store a vocabulary in memory, keeping memory usage
-constant regardless of dataset size.
+    st.divider()
 
-**Model:** `SGDClassifier` (hinge loss, equivalent to a linear SVM), trained
-out-of-core via `partial_fit` in batches of 30,000 rows over 3 epochs, with manually
-computed balanced class weights to account for the ~55% share held by the largest
-category (Credit reporting).
+    # ---- Pipeline as cards ----
+    st.markdown("### The pipeline")
 
-**Confidence scores:** since hinge loss doesn't produce calibrated probabilities,
-per-prediction confidence is computed by applying softmax to the raw decision scores
-across all 9 categories — a reasonable proxy for relative confidence, not a true
-statistical probability.
-    """)
+    p1, p2, p3, p4, p5 = st.columns(5)
 
-    st.markdown("#### Honest limitations")
-    st.markdown("""
-- **Bag-of-words ceiling:** additional training epochs and bigrams did not meaningfully
-  improve accuracy (85.26% → 85.31%), suggesting remaining errors are semantic in nature
-  rather than a training issue — a linear model can't distinguish "vehicle loan default"
-  from "personal loan default" language without deeper contextual understanding.
-- **Minority class performance:** Payday/title/personal loan (F1 0.44) and Vehicle loan
-  (F1 0.55) are the weakest categories, both due to smaller sample sizes and genuine
-  vocabulary overlap with Debt collection and each other.
-- **Text-only input:** the model only sees the narrative — it doesn't use other fields
-  (state, company, submission channel) that a production system might also leverage.
-    """)
+    with p1:
+        st.markdown("**1. Load**")
+        st.caption(
+            "Lazy-scanned the 8GB CSV with Polars, selecting only needed columns "
+            "and filtering to non-empty narratives — full pandas load crashed on "
+            "12GB Colab RAM."
+        )
+    with p2:
+        st.markdown("**2. Clean**")
+        st.caption(
+            "Consolidated 21 overlapping `Product` labels into 9, merging categories "
+            "renamed over time by CFPB's taxonomy changes (e.g. 3 historical labels "
+            "for Credit reporting → 1)."
+        )
+    with p3:
+        st.markdown("**3. Vectorize**")
+        st.caption(
+            "`HashingVectorizer` (524,288 features, unigrams + bigrams) — no stored "
+            "vocabulary, so memory stays constant regardless of dataset size."
+        )
+    with p4:
+        st.markdown("**4. Train**")
+        st.caption(
+            "`SGDClassifier` (linear SVM) trained out-of-core via `partial_fit`, "
+            "batches of 30K rows, 3 epochs, manually balanced class weights."
+        )
+    with p5:
+        st.markdown("**5. Evaluate**")
+        st.caption(
+            "Stratified 80/20 split, per-class precision/recall/F1, plus a "
+            "normalized confusion matrix to trace exactly where errors cluster."
+        )
 
-    st.caption("Model: scikit-learn SGDClassifier · random_state=42 · trained on Google Colab")
+    st.divider()
+
+    # ---- Key engineering decisions ----
+    st.markdown("### Key engineering decisions")
+
+    d1, d2 = st.columns(2)
+    with d1:
+        st.markdown("##### Why HashingVectorizer over TF-IDF")
+        st.write(
+            "TF-IDF must build and store a full vocabulary before transforming — at "
+            "millions of documents, that vocabulary alone risks exhausting available "
+            "RAM. HashingVectorizer maps tokens directly to a fixed number of hash "
+            "buckets with no stored vocabulary, keeping memory flat no matter how "
+            "much text is processed."
+        )
+        st.markdown("##### Why out-of-core training (`partial_fit`)")
+        st.write(
+            "Materializing a vectorized matrix for all 3M+ training rows at once "
+            "would require holding an enormous sparse array in memory. Training in "
+            "30,000-row batches — vectorize, fit, discard, repeat — keeps peak memory "
+            "usage constant regardless of total dataset size."
+        )
+    with d2:
+        st.markdown("##### Why manually computed class weights")
+        st.write(
+            "`SGDClassifier.partial_fit()` doesn't support `class_weight='balanced'` "
+            "directly, since balancing requires knowing the full class distribution "
+            "upfront, which a single batch can't provide. Weights were precomputed "
+            "once from the full training label distribution and passed explicitly."
+        )
+        st.markdown("##### What didn't work (and why that's useful)")
+        st.write(
+            "Adding a 2nd/3rd training epoch and bigrams moved accuracy only "
+            "0.05 points (85.26% → 85.31%). This negative result indicates the "
+            "linear model had already converged — remaining errors are a "
+            "representation ceiling, not an undertraining problem."
+        )
+
+    st.divider()
+
+    # ---- Confidence score explainer ----
+    st.markdown("### How confidence scores work")
+    st.write(
+        "Hinge loss (the loss function behind a linear SVM) doesn't produce "
+        "calibrated probabilities the way logistic regression does. Per-prediction "
+        "confidence on the **Try It** tab is computed by applying softmax to the "
+        "model's raw decision scores across all 9 categories — a reasonable proxy "
+        "for relative confidence, not a true statistical probability."
+    )
+
+    st.divider()
+
+    # ---- Honest limitations as cards ----
+    st.markdown("### Honest limitations")
+
+    l1, l2, l3 = st.columns(3)
+    with l1:
+        st.warning(
+            "**Bag-of-words ceiling**\n\n"
+            "A linear model can't distinguish 'vehicle loan default' from "
+            "'personal loan default' language without deeper semantic context. "
+            "This is a representation limit, not a tuning issue."
+        )
+    with l2:
+        st.warning(
+            "**Minority class weakness**\n\n"
+            "Payday/title/personal loan (F1 0.44) and Vehicle loan (F1 0.55) "
+            "are the weakest categories — fewer training examples plus genuine "
+            "vocabulary overlap with Debt collection and each other."
+        )
+    with l3:
+        st.warning(
+            "**Text-only input**\n\n"
+            "The model only reads the narrative. It ignores other available "
+            "signals (state, company, submission channel) that a production "
+            "system would likely also use."
+        )
+
+    st.divider()
+    st.caption(
+        "Model: scikit-learn SGDClassifier · random_state=42 · trained on Google Colab "
+        "(free tier, ~12GB RAM) · dataset: CFPB Consumer Complaint Database"
+    )
