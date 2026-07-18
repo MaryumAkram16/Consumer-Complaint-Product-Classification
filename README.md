@@ -64,7 +64,7 @@ A naive baseline that always predicted the majority class (Credit reporting) wou
 
 ### Confusion Matrix
 
-![Confusion Matrix](confusion_matrix.png)
+![Confusion Matrix](complaint-product-classification.PNG)
 
 The normalized confusion matrix shows that most of the model's errors are concentrated in a few specific, explainable pairs:
 
@@ -100,6 +100,10 @@ predict_category(
     clf, vectorizer
 )
 ```
+
+## Repository
+
+[github.com/MaryumAkram16/Consumer-Complaint-Product-Classification](https://github.com/MaryumAkram16/Consumer-Complaint-Product-Classification)
 
 ## Tech Stack
 
