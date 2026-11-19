@@ -84,12 +84,12 @@ Beyond the model itself, the deployed Streamlit app adds a few things worth call
 
 - **Bilingual input (English + Urdu):** since the model was trained only on English complaints, Urdu input is automatically translated to English (via `deep-translator`) before classification. The translated text is shown transparently so it's clear exactly what the model actually saw — this is a translate-then-classify pipeline, not native Urdu understanding.
 - **Voice input:** complaints can be typed or spoken (in either language) using Streamlit's built-in audio recorder, transcribed via `SpeechRecognition`. Speech-to-text errors are a real, observed failure mode — see the example below.
-- **Per-prediction confidence:** since the model uses hinge loss (no calibrated probabilities), confidence is computed by applying softmax to the raw decision scores across all 9 categories, and displayed both as ranked bars and as a radar chart.
+- **Relative prediction scores:** since the model uses hinge loss (no calibrated probabilities), relative scores are computed by applying softmax to the raw decision scores across all 9 categories, and displayed both as ranked bars and as a radar chart.
 - **Dark, card-based UI** styled after a reference SaaS product design, rather than default Streamlit theming.
 
 ### A real multilingual failure case
 
-Testing the Urdu voice pipeline surfaced a genuine, traceable error: a spoken complaint about **credit card fraud** was misclassified as **Debt collection** (41.4% confidence) instead of **Credit card or prepaid card**. Tracing the pipeline showed the speech recognizer mistranscribed "جعلی چارج" (*fraudulent charge*) as an unrelated phrase, stripping the fraud signal before translation or classification ever occurred. The classifier correctly handled the (corrupted) text it received — the error originated upstream, in speech recognition, not in the model. This is a useful, honest illustration that in a speech-based pipeline, errors can compound before the model ever sees clean input.
+Testing the Urdu voice pipeline surfaced a genuine, traceable error: a spoken complaint about **credit card fraud** was misclassified as **Debt collection** (41.4% relative score) instead of **Credit card or prepaid card**. Tracing the pipeline showed the speech recognizer mistranscribed "جعلی چارج" (*fraudulent charge*) as an unrelated phrase, stripping the fraud signal before translation or classification ever occurred. The classifier correctly handled the (corrupted) text it received — the error originated upstream, in speech recognition, not in the model. This is a useful, honest illustration that in a speech-based pipeline, errors can compound before the model ever sees clean input.
 
 ## What Didn't Work (and Why That's Useful to Know)
 
@@ -99,6 +99,28 @@ Two follow-up experiments were run to try to close the gap on the weakest catego
 2. **Adding bigrams** to the vectorizer (previously unigrams only)
 
 Neither meaningfully changed the results (accuracy moved from 85.26% to 85.31%). This is a useful negative result: it suggests the linear model had already converged after one pass on this much data, and that the remaining confusion is a limitation of bag-of-words representations rather than a training or tuning issue — the model can't distinguish "vehicle loan default" from "personal loan default" language it hasn't been given the semantic context to differentiate. Closing this gap further would likely require an embedding-based or transformer-based representation capable of capturing meaning rather than word frequency alone.
+
+## Repository layout and deployment notes
+
+- `app.py`: Streamlit interface and inference pipeline
+- `complaint_classifier.ipynb`: training and evaluation notebook
+- `complaint_product_classifier.pkl` and `hashing_vectorizer.pkl`: model artifacts
+- `complaint-product-classification.PNG`: confusion matrix
+- `.streamlit/`: application configuration
+- `requirements.txt` and `runtime.txt`: deployment dependencies
+- `tests/`: model inference smoke tests
+
+Model artifacts remain at the root to preserve the existing deployed app's relative paths. Moving them requires updating the loader and checking deployment.
+
+**Score interpretation:** Softmax-normalized SVM margins are **not calibrated probabilities**. They compare relative model scores for a prediction, not validated confidence.
+
+**Security:** Only deserialize trusted `joblib`/pickle artifacts.
+
+### Smoke tests
+
+```bash
+python -m unittest discover -s tests
+```
 
 ## Usage
 
