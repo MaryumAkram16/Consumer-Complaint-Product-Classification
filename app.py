@@ -2,6 +2,7 @@ import streamlit as st
 import joblib
 import numpy as np
 import math
+from html import escape
 import speech_recognition as sr
 from deep_translator import GoogleTranslator
 
@@ -322,7 +323,7 @@ if page == "🔍  Try It":
             if language.startswith("Urdu"):
                 try:
                     english_text = GoogleTranslator(source="ur", target="en").translate(raw_text)
-                    st.markdown(f'<div class="card"><b>Translated to English:</b><br>{english_text}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="card"><b>Translated to English:</b><br>{escape(english_text)}</div>', unsafe_allow_html=True)
                 except Exception:
                     st.error("Translation failed. Please try again or type in English.")
                     st.stop()
@@ -342,19 +343,19 @@ if page == "🔍  Try It":
             st.markdown(f"""
             <div class="result-card">
                 <div class="result-label">Predicted Category</div>
-                <div class="result-value">{prediction}</div>
-                <span class="badge badge-purple">Confidence: {confidence[order[0]]*100:.1f}%</span>
+                <div class="result-value">{escape(str(prediction))}</div>
+                <span class="badge badge-purple">Relative score: {confidence[order[0]]*100:.1f}%</span>
                 <span class="badge badge-teal">Linear SVM</span>
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("#### Confidence breakdown")
+            st.markdown("#### Relative score breakdown")
             bars_html = '<div class="card">'
             for i in order[:5]:
                 pct = confidence[i] * 100
                 bars_html += (
                     '<div class="conf-row">'
-                    f'<div class="conf-label"><span>{classes[i]}</span><span>{pct:.1f}%</span></div>'
+                    f'<div class="conf-label"><span>{escape(str(classes[i]))}</span><span>{pct:.1f}%</span></div>'
                     f'<div class="conf-track"><div class="conf-fill" style="width:{pct}%;"></div></div>'
                     '</div>'
                 )
@@ -362,12 +363,12 @@ if page == "🔍  Try It":
             st.markdown(bars_html, unsafe_allow_html=True)
 
             st.markdown("#### Category radar")
-            st.caption("Each spoke is a product category — distance from center reflects confidence. The highlighted wedge marks the top prediction.")
+            st.caption("Each spoke is a product category — distance from center reflects relative score. The highlighted wedge marks the top prediction.")
             radar_svg = build_radar_svg(classes, confidence, order[0])
             st.markdown(f'<div class="card" style="display:flex;justify-content:center;">{radar_svg}</div>', unsafe_allow_html=True)
 
             st.caption(
-                "Confidence reflects the model's relative certainty, not a guarantee of correctness. "
+                "Scores are softmax-normalized SVM margins, not calibrated probabilities. "
                 "Overall accuracy across all categories is 85.3% on English narratives."
             )
 
